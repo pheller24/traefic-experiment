@@ -1,0 +1,68 @@
+version: '3.3'
+
+services:
+  proxy:
+    image: traefik:v2.6
+    # Enables the web UI and tells Traefik to listen to docker
+    command:
+      - "--log.level=DEBUG"
+      - "--api.insecure=true"
+      - "--api.dashboard"
+      - "--api.insecure" # Don't do that in production
+      - "--providers.docker"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+    ports:
+      # The HTTP port
+      - "80:80"
+      - "443:443"
+      # The Web UI (enabled by --api.insecure=true)
+      - "8080:8080"
+    volumes:
+      # So that Traefik can listen to the Docker events
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+  db:
+    image: mariadb:10.7
+    restart: always
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MYSQL_USER: user
+      MYSQL_PASSWORD: user
+    volumes:
+      - ./infra:/docker-entrypoint-initdb.d
+    ports:
+      - '13307:3306'
+  php81:
+    build:
+      dockerfile: ./infra/php/Dockerfile
+      context: .
+      args:
+        - PHP=8.1
+    depends_on:
+      - db
+    labels:
+      - traefik.enable=true
+      - traefik.port=433
+      - traefik.http.routers.php81.rule=Host(`test-projekt.app`)
+      - traefik.http.routers.php81.entrypoints=websecure
+      - traefik.http.routers.php81.tls=true
+    volumes:
+      - ./test-projekt:/var/www/test-projekt/
+      - ./infra/sites-enabled:/etc/apache2/sites-enabled/
+  php74:
+    build:
+      dockerfile: ./infra/php/Dockerfile
+      context: .
+      args:
+        - PHP=7.4
+    depends_on:
+      - db
+    labels:
+      - traefik.enable=true
+      - traefik.port=433
+      - traefik.http.routers.php74.rule=Host(`test-projekt2.app`)
+      - traefik.http.routers.php74.entrypoints=websecure
+      - traefik.http.routers.php74.tls=true
+    volumes:
+      - ./test-projekt2:/var/www/test-projekt2/
+      - ./infra/sites-enabled:/etc/apache2/sites-enabled/
